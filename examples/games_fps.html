@@ -41,23 +41,27 @@
 			const clock = new THREE.Clock();
 
 			const scene = new THREE.Scene();
-			scene.background = new THREE.Color( 0x88ccee );
-			scene.fog = new THREE.Fog( 0x88ccee, 0, 50 );
+			scene.background = new THREE.Color(0xffa64d); // Naranja atardecer
+			scene.fog = new THREE.Fog(0xffa64d, 5, 100); // Inicia cerca y termina más lejos
+
+
 
 			const camera = new THREE.PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 0.1, 1000 );
 			camera.rotation.order = 'YXZ';
 
-			const fillLight1 = new THREE.HemisphereLight( 0x8dc1de, 0x00668d, 1.5 );
-			fillLight1.position.set( 2, 1, 1 );
-			scene.add( fillLight1 );
+			const fillLight1 = new THREE.HemisphereLight(0xffe0b2, 0xff8a65, 1.0);
+			// luz superior e inferior cálida
+			fillLight1.position.set(2, 1, 1);
+			scene.add(fillLight1);
 
-			const directionalLight = new THREE.DirectionalLight( 0xffffff, 2.5 );
-			directionalLight.position.set( - 5, 25, - 1 );
+
+			const directionalLight = new THREE.DirectionalLight(0xffcc80, 2.0); // Luz cálida
+			directionalLight.position.set(-10, 15, -5); // Posición tipo "sol bajando"
 			directionalLight.castShadow = true;
 			directionalLight.shadow.camera.near = 0.01;
-			directionalLight.shadow.camera.far = 500;
-			directionalLight.shadow.camera.right = 30;
-			directionalLight.shadow.camera.left = - 30;
+			directionalLight.shadow.camera.far = 200;
+			directionalLight.shadow.mapSize.width = 1024;
+			directionalLight.shadow.mapSize.height = 1024;
 			directionalLight.shadow.camera.top	= 30;
 			directionalLight.shadow.camera.bottom = - 30;
 			directionalLight.shadow.mapSize.width = 1024;
@@ -89,8 +93,10 @@
 
 			const STEPS_PER_FRAME = 5;
 
+			const explosionFlashes = [];
+
 			const sphereGeometry = new THREE.IcosahedronGeometry( SPHERE_RADIUS, 5 );
-			const sphereMaterial = new THREE.MeshLambertMaterial( { color: 0xdede8d } );
+			const sphereMaterial = new THREE.MeshLambertMaterial( { color: 0xff4444 } );
 
 			const spheres = [];
 			let sphereIdx = 0;
@@ -106,14 +112,19 @@
 				spheres.push( {
 					mesh: sphere,
 					collider: new THREE.Sphere( new THREE.Vector3( 0, - 100, 0 ), SPHERE_RADIUS ),
-					velocity: new THREE.Vector3()
+					velocity: new THREE.Vector3(),
+					exploding: false,
+					explodeTime: 0
 				} );
 
 			}
 
 			const worldOctree = new Octree();
 
-			const playerCollider = new Capsule( new THREE.Vector3( 0, 0.35, 0 ), new THREE.Vector3( 0, 1, 0 ), 0.35 );
+			const playerCollider = new Capsule(new THREE.Vector3(5, 2.35, 5), // NUEVA POSICIÓN START
+			new THREE.Vector3(5, 3, 5),    // NUEVA POSICIÓN END
+0.35
+);
 
 			const playerVelocity = new THREE.Vector3();
 			const playerDirection = new THREE.Vector3();
@@ -176,23 +187,33 @@
 			}
 
 			function throwBall() {
+	let attempts = 0;
+	while (attempts < spheres.length) {
+		const sphere = spheres[sphereIdx];
 
-				const sphere = spheres[ sphereIdx ];
+		// Si no está explotando, puede usarse
+		if (!sphere.exploding) {
+			sphere.mesh.visible = true;
+			sphere.mesh.scale.set(1, 1, 1);
+			sphere.mesh.material.color.set(0xff4444);
 
-				camera.getWorldDirection( playerDirection );
+			camera.getWorldDirection(playerDirection);
+			sphere.collider.center.copy(playerCollider.end).addScaledVector(playerDirection, playerCollider.radius * 1.5);
 
-				sphere.collider.center.copy( playerCollider.end ).addScaledVector( playerDirection, playerCollider.radius * 1.5 );
+			const impulse = 50 + 50 * (1 - Math.exp((mouseTime - performance.now()) * 0.001));
+			sphere.velocity.copy(playerDirection).multiplyScalar(impulse);
+			sphere.velocity.addScaledVector(playerVelocity, 2);
 
-				// throw the ball with more force if we hold the button longer, and if we move forward
+			sphereIdx = (sphereIdx + 1) % spheres.length;
+			return;
+		}
 
-				const impulse = 15 + 30 * ( 1 - Math.exp( ( mouseTime - performance.now() ) * 0.001 ) );
+		sphereIdx = (sphereIdx + 1) % spheres.length;
+		attempts++;
+	}
+}
 
-				sphere.velocity.copy( playerDirection ).multiplyScalar( impulse );
-				sphere.velocity.addScaledVector( playerVelocity, 2 );
 
-				sphereIdx = ( sphereIdx + 1 ) % spheres.length;
-
-			}
 
 			function playerCollisions() {
 
@@ -313,41 +334,79 @@
 
 			}
 
-			function updateSpheres( deltaTime ) {
+			function updateSpheres(deltaTime) {
+	spheres.forEach(sphere => {
+		// Si está explotando, ejecutar la animación de explosión
+		if (sphere.exploding) {
+			sphere.explodeTime += deltaTime;
 
-				spheres.forEach( sphere => {
+			const scale = 1 + 2 * Math.sin(Math.PI * Math.min(sphere.explodeTime, 0.2) * 5);
+			sphere.mesh.scale.set(scale, scale, scale);
 
-					sphere.collider.center.addScaledVector( sphere.velocity, deltaTime );
+			sphere.mesh.material.color.set(0xffaa00);
 
-					const result = worldOctree.sphereIntersect( sphere.collider );
-
-					if ( result ) {
-
-						sphere.velocity.addScaledVector( result.normal, - result.normal.dot( sphere.velocity ) * 1.5 );
-						sphere.collider.center.add( result.normal.multiplyScalar( result.depth ) );
-
-					} else {
-
-						sphere.velocity.y -= GRAVITY * deltaTime;
-
-					}
-
-					const damping = Math.exp( - 1.5 * deltaTime ) - 1;
-					sphere.velocity.addScaledVector( sphere.velocity, damping );
-
-					playerSphereCollision( sphere );
-
-				} );
-
-				spheresCollisions();
-
-				for ( const sphere of spheres ) {
-
-					sphere.mesh.position.copy( sphere.collider.center );
-
-				}
-
+			if (sphere.explodeTime > 0.2) {
+				sphere.mesh.visible = false;
+				sphere.collider.center.set(0, -100, 0);
+				sphere.exploding = false;
+				sphere.mesh.scale.set(1, 1, 1);
+				sphere.mesh.material.color.set(0xff4444);
 			}
+
+			return; // No mover ni procesar colisiones si está explotando
+		}
+
+		// Mover esfera
+		sphere.collider.center.addScaledVector(sphere.velocity, deltaTime);
+
+		// Colisión con el mundo
+		const result = worldOctree.sphereIntersect(sphere.collider);
+
+		if (result) {
+			sphere.velocity.set(0, 0, 0);
+			sphere.collider.center.add(result.normal.multiplyScalar(result.depth));
+			sphere.exploding = true;
+			sphere.explodeTime = 0;
+
+			// Crear flash de luz
+			const flash = new THREE.PointLight(0xffaa00, 8, 6); // color, intensidad, distancia
+			flash.position.copy(sphere.collider.center);
+			scene.add(flash);
+
+			// Guardar el flash para eliminarlo luego
+			explosionFlashes.push({ light: flash, time: 0 });
+
+		} else {
+			sphere.velocity.y -= GRAVITY * deltaTime;
+		}
+
+		// Frenado
+		const damping = Math.exp(-1.5 * deltaTime) - 1;
+		sphere.velocity.addScaledVector(sphere.velocity, damping);
+
+		playerSphereCollision(sphere);
+	});
+
+	spheresCollisions();
+
+	// Actualizar posición visual de cada esfera
+	for (const sphere of spheres) {
+		sphere.mesh.position.copy(sphere.collider.center);
+	}
+
+	// Actualizar y eliminar flashes de explosión
+for (let i = explosionFlashes.length - 1; i >= 0; i--) {
+	const flash = explosionFlashes[i];
+	flash.time += deltaTime;
+
+	if (flash.time > 0.2) {
+		scene.remove(flash.light);
+		explosionFlashes.splice(i, 1);
+	}
+}
+
+}
+
 
 			function getForwardVector() {
 
@@ -411,52 +470,101 @@
 
 			}
 
-			const loader = new GLTFLoader().setPath( './models/gltf/' );
-
-			loader.load( 'collision-world.glb', ( gltf ) => {
-
-				scene.add( gltf.scene );
-
-				worldOctree.fromGraphNode( gltf.scene );
-
-				gltf.scene.traverse( child => {
-
-					if ( child.isMesh ) {
-
-						child.castShadow = true;
-						child.receiveShadow = true;
-
-						if ( child.material.map ) {
-
-							child.material.map.anisotropy = 4;
-
-						}
-
-					}
-
-				} );
-
-				const helper = new OctreeHelper( worldOctree );
-				helper.visible = false;
-				scene.add( helper );
-
-				const gui = new GUI( { width: 200 } );
-				gui.add( { debug: false }, 'debug' )
-					.onChange( function ( value ) {
-
-						helper.visible = value;
-
-					} );
 			
-			} );
+
+			import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+
+			const dracoLoader = new DRACOLoader();
+			dracoLoader.setDecoderPath('./jsm/libs/draco/');
+
+			const loader = new GLTFLoader().setPath('./models/gltf/');
+			loader.setDRACOLoader(dracoLoader);
+
+
+			const loadingDiv = document.createElement('div');
+			loadingDiv.innerText = 'Cargando mapa...';
+			loadingDiv.style.position = 'absolute';
+			loadingDiv.style.top = '50%';
+			loadingDiv.style.left = '50%';
+			loadingDiv.style.transform = 'translate(-50%, -50%)';
+			loadingDiv.style.color = 'white';
+			loadingDiv.style.fontSize = '24px';
+			document.body.appendChild(loadingDiv);
+
+
+			loader.load('battlefield.glb',(gltf) => {
+    scene.add(gltf.scene);
+    worldOctree.fromGraphNode(gltf.scene);
+
+    gltf.scene.traverse(child => {
+  if (child.isMesh) {
+    child.castShadow = true;
+    child.receiveShadow = true;
+
+    if (child.material.map) {
+      child.material.map.anisotropy = 4;
+    }
+  }
+});
+
+
+    //const helper = new OctreeHelper(worldOctree);
+    helper.visible = false;
+    //scene.add(helper);
+
+    const gui = new GUI({ width: 200 });
+    gui.add({ debug: false }, 'debug').onChange(val => helper.visible = val);
+
+    // ✅ Eliminar el mensaje tras carga exitosa
+    removeLoading();
+  },
+  undefined,
+  (error) => {
+    console.error("❌ Error cargando el mapa:", error);
+
+    // ❗ También quitamos el mensaje si falla
+    removeLoading();
+  }
+);
+
+// Función segura para eliminar el mensaje
+function removeLoading() {
+  if (document.body.contains(loadingDiv)) {
+    loadingDiv.remove();
+  }
+
+  // ✅ Mostrar mensaje de éxito
+  const successDiv = document.createElement('div');
+  successDiv.innerText = 'Mapa cargado con éxito';
+  successDiv.style.position = 'absolute';
+  successDiv.style.top = '50%';
+  successDiv.style.left = '50%';
+  successDiv.style.transform = 'translate(-50%, -50%)';
+  successDiv.style.color = 'white';
+  successDiv.style.fontSize = '24px';
+  successDiv.style.background = 'rgba(0, 0, 0, 0.6)';
+  successDiv.style.padding = '10px 20px';
+  successDiv.style.borderRadius = '8px';
+  successDiv.style.zIndex = '9999';
+  document.body.appendChild(successDiv);
+
+  setTimeout(() => {
+    if (document.body.contains(successDiv)) {
+      successDiv.remove();
+    }
+  }, 2500);
+}
+
+
 
 			function teleportPlayerIfOob() {
 
 				if ( camera.position.y <= - 25 ) {
 
-					playerCollider.start.set( 0, 0.35, 0 );
-					playerCollider.end.set( 0, 1, 0 );
-					playerCollider.radius = 0.35;
+					playerCollider.start.set(5, 2.35, 5);
+playerCollider.end.set(5, 3, 5);
+camera.position.copy(playerCollider.end);
+
 					camera.position.copy( playerCollider.end );
 					camera.rotation.set( 0, 0, 0 );
 
