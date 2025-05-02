@@ -27,6 +27,11 @@
 
 			import * as THREE from 'three';
 
+			const textureLoader = new THREE.TextureLoader();
+
+			const smokeTexture = textureLoader.load('./textures/smoke.png');
+			const explosionTexture = textureLoader.load('./textures/explosion.png');
+
 			import Stats from 'three/addons/libs/stats.module.js';
 
 			import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -753,46 +758,79 @@ function actualizarCaidaAvion(avion, deltaTime, index) {
 			if (!avion.smokeTimer) avion.smokeTimer = 0;
 			avion.smokeTimer += deltaTime;
 
-			if (avion.smokeTimer > 0.1) {
-				avion.smokeTimer = 0;
+			if (avion.smokeTimer > 0.03) {
+  avion.smokeTimer = 0;
 
-				const smoke = new THREE.Mesh(
-				new THREE.SphereGeometry(0.3, 6, 6),
-				new THREE.MeshBasicMaterial({ color: 0x555555, transparent: true, opacity: 0.5 })
-				);
+  const smokeGroup = new THREE.Group();
 
-				smoke.position.copy(avion.mesh.position);
-				scene.add(smoke);
+  for (let j = 0; j < 5; j++) {
+    const material = new THREE.SpriteMaterial({
+      map: smokeTexture,
+      transparent: true,
+      opacity: 0.5 + Math.random() * 0.2,
+      depthWrite: false,
+      blending: THREE.NormalBlending
+    });
 
-				// Animación de desvanecimiento
-				explosionFlashes.push({
-				light: smoke,
-				time: 0,
-				type: 'smoke'
-				});
-			}
+    const sprite = new THREE.Sprite(material);
+    const scale = 1.5 + Math.random() * 1.2;
+    sprite.scale.set(scale, scale, scale);
+
+    // Posición local aleatoria
+    const offset = new THREE.Vector3(
+      (Math.random() - 0.5) * 2,
+      Math.random() * 1.5,
+      (Math.random() - 0.5) * 2
+    );
+    sprite.position.copy(offset);
+    material.rotation = Math.random() * Math.PI * 2;
+
+    smokeGroup.add(sprite);
+  }
+
+  smokeGroup.position.copy(avion.mesh.position.clone());  // Fija en espacio
+  scene.add(smokeGroup);
+
+  explosionFlashes.push({
+    light: smokeGroup,
+    time: 0,
+    type: 'smokeGroup',
+    velocity: new THREE.Vector3(
+  (Math.random() - 0.5) * 0.05, // viento lateral
+  0.08 + Math.random() * 0.05,  // ascenso más lento
+  (Math.random() - 0.5) * 0.05  // profundidad
+)
+
+  });
+}
+
+
 
 			// Detectar impacto con el suelo
-			if (avion.mesh.position.y < 0.5) {
-				// 💥 Explosión antes de desaparecer
-				const explosion = new THREE.Mesh(
-				new THREE.SphereGeometry(1, 16, 16),
-				new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 1 })
-				);
-				explosion.position.copy(avion.mesh.position);
-				scene.add(explosion);
+			if (avion.mesh.position.y < -5) {
+				const explosionMaterial = new THREE.SpriteMaterial({
+  map: explosionTexture,
+  transparent: true,
+  opacity: 1,
+  depthWrite: false
+});
+const explosion = new THREE.Sprite(explosionMaterial);
+explosion.scale.set(3, 3, 3);
+explosion.position.copy(avion.mesh.position);
+scene.add(explosion);
 
-				// Luz de la explosión
-				const flash = new THREE.PointLight(0xff5500, 10, 8);
-				flash.position.copy(avion.mesh.position);
-				scene.add(flash);
+// Luz de la explosión
+const flash = new THREE.PointLight(0xff5500, 10, 8);
+flash.position.copy(avion.mesh.position);
+scene.add(flash);
 
-				// Guardar ambos para desaparecer después
-				explosionFlashes.push({ light: explosion, time: 0, type: 'explosion' });
-				explosionFlashes.push({ light: flash, time: 0, type: 'light' });
+// Guardar ambos para desaparecer después
+explosionFlashes.push({ light: explosion, time: 0, type: 'explosion' });
+explosionFlashes.push({ light: flash, time: 0, type: 'light' });
 
-				scene.remove(avion.mesh);
-				aviones.splice(i, 1);
+scene.remove(avion.mesh);
+aviones.splice(i, 1);
+
 			}
 
 			continue;
@@ -838,25 +876,47 @@ for (let i = explosionFlashes.length - 1; i >= 0; i--) {
   e.time += deltaTime;
 
   if (e.type === 'smoke') {
-    e.light.material.opacity -= deltaTime * 0.5;
-    e.light.scale.multiplyScalar(1 + deltaTime * 0.3);
-    if (e.light.material.opacity <= 0) {
-      scene.remove(e.light);
-      explosionFlashes.splice(i, 1);
-    }
-  } else if (e.type === 'explosion') {
-    e.light.material.opacity -= deltaTime * 2.0;
-    e.light.scale.multiplyScalar(1 + deltaTime * 5.0);
-    if (e.light.material.opacity <= 0) {
-      scene.remove(e.light);
-      explosionFlashes.splice(i, 1);
-    }
-  } else if (e.type === 'light') {
-    if (e.time > 0.4) {
-      scene.remove(e.light);
-      explosionFlashes.splice(i, 1);
-    }
+  e.light.position.addScaledVector(e.velocity, deltaTime); // se mueve hacia arriba
+  e.light.material.opacity -= deltaTime * 0.15; // más lento
+  e.light.scale.multiplyScalar(1 + deltaTime * 0.1);
+  if (e.light.material.opacity <= 0) {
+    scene.remove(e.light);
+    explosionFlashes.splice(i, 1);
   }
+}else if (e.type === 'smokeGroup') {
+  let fullyFaded = true;
+
+  e.light.children.forEach(sprite => {
+    sprite.material.opacity -= deltaTime * 0.015;
+    sprite.material.rotation += deltaTime * 0.5;
+    sprite.scale.multiplyScalar(1 + deltaTime * 0.03);
+    if (sprite.material.opacity > 0.01) fullyFaded = false;
+  });
+
+  if (fullyFaded) {
+    e.light.children.forEach(sprite => scene.remove(sprite));
+    scene.remove(e.light);
+    explosionFlashes.splice(i, 1);
+  }
+  e.light.position.addScaledVector(e.velocity, deltaTime);
+
+}
+
+
+
+else if (e.type === 'explosion') {
+  e.light.material.opacity -= deltaTime * 0.07; // más lenta
+  e.light.scale.multiplyScalar(1 + deltaTime * 2.5); // crecimiento moderado
+  if (e.light.material.opacity <= 0) {
+    scene.remove(e.light);
+    explosionFlashes.splice(i, 1);
+  }
+} else if (e.type === 'light') {
+  if (e.time > 4) { // luz dura más
+    scene.remove(e.light);
+    explosionFlashes.splice(i, 1);
+  }
+}
 }
 
 
