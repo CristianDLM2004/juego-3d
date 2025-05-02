@@ -8,9 +8,9 @@
 	</head>
 	<body>
 		<div id="info">
-			Octree threejs demo - basic collisions with static triangle mesh<br />
-			MOUSE to look around and to throw balls<br/>
-			WASD to move and SPACE to jump
+			<br />
+			Da click en la pantalla para mover la cámara y poder disparar<br/>
+			WASD para moverte y Espacio para saltar
 		</div>
 		<div id="container"></div>
 
@@ -56,7 +56,7 @@
 
 
 			const directionalLight = new THREE.DirectionalLight(0xffcc80, 2.0); // Luz cálida
-			directionalLight.position.set(-10, 15, -5); // Posición tipo "sol bajando"
+			directionalLight.position.set(10, 15, 5); // Posición tipo "sol bajando"
 			directionalLight.castShadow = true;
 			directionalLight.shadow.camera.near = 0.01;
 			directionalLight.shadow.camera.far = 200;
@@ -200,7 +200,7 @@
 			camera.getWorldDirection(playerDirection);
 			sphere.collider.center.copy(playerCollider.end).addScaledVector(playerDirection, playerCollider.radius * 1.5);
 
-			const impulse = 50 + 50 * (1 - Math.exp((mouseTime - performance.now()) * 0.001));
+			const impulse = 80 + 100 * (1 - Math.exp((mouseTime - performance.now()) * 0.001));
 			sphere.velocity.copy(playerDirection).multiplyScalar(impulse);
 			sphere.velocity.addScaledVector(playerVelocity, 2);
 
@@ -358,6 +358,25 @@
 
 		// Mover esfera
 		sphere.collider.center.addScaledVector(sphere.velocity, deltaTime);
+
+		for (const avion of aviones) {
+  if (avion.isFalling) continue;
+
+  const avionPos = avion.mesh.position;
+  const distancia = avionPos.distanceTo(sphere.collider.center);
+
+  if (distancia < 2.0) { // Ajusta el radio de colisión si es necesario
+    avion.health -= 1;
+    sphere.exploding = true;
+    sphere.explodeTime = 0;
+
+    if (avion.health <= 0) {
+      avion.isFalling = true;
+	  avion.fallVelocity = new THREE.Vector3(0, -0.5, 0);
+    }
+  }
+}
+
 
 		// Colisión con el mundo
 		const result = worldOctree.sphereIntersect(sphere.collider);
@@ -555,7 +574,90 @@ function removeLoading() {
   }, 2500);
 }
 
+const avionLoader = new GLTFLoader().setPath('./models/gltf/');
+avionLoader.setDRACOLoader(dracoLoader);
 
+const aviones = [];
+
+function crearAvion() {
+  avionLoader.load('avion.glb', (gltf) => {
+    const avion = gltf.scene.clone();
+
+    const x = Math.random() * 80 - 40;
+    const y = 8 + Math.random() * 3; // Altura un poco más baja
+    const z = -100; // Muy lejos, para que aparezca en la niebla
+
+    avion.position.set(x, y, z);
+    avion.rotation.y = 0; // Volar hacia adelante
+
+    avion.scale.set(1, 1, 1);
+    avion.traverse(child => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+        child.frustumCulled = false;
+      }
+    });
+
+    scene.add(avion);
+	aviones.push({
+  mesh: avion,
+  speed: 0.4,
+  curvo: false,
+  health: 8, // puntos de vida
+  isFalling: false // aún no ha sido destruido
+});
+  });
+}
+
+// Crear varios aviones iniciales
+for (let i = 0; i < 5; i++) {
+  crearAvion();
+}
+
+function crearAvionCurvo() {
+  avionLoader.load('avion_curvo.glb', (gltf) => {
+    const avion = gltf.scene.clone();
+
+    const angle = Math.random() * 2 * Math.PI;
+    const radius = 60 + Math.random() * 20;
+    const y = 8 + Math.random() * 5;
+
+    avion.position.set(Math.cos(angle) * radius, y, Math.sin(angle) * radius);
+avion.rotation.y = Math.PI / 2; // Corrige orientación base
+
+avion.scale.set(1, 1, 1);
+avion.userData = {
+  angle,
+  radius,
+  speed: 0.2 + Math.random() * 0.1,
+  heightBase: y,
+  heightOffset: Math.random() * 2
+    };
+
+    avion.traverse(child => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+        child.frustumCulled = false;
+      }
+    });
+
+    scene.add(avion);
+	aviones.push({
+  mesh: avion,
+  speed: 0.4,
+  curvo: true,
+  health: 8, // puntos de vida
+  isFalling: false // aún no ha sido destruido
+});
+  });
+}
+
+// Crear aviones curvos
+for (let i = 0; i < 3; i++) {
+  crearAvionCurvo();
+}
 
 			function teleportPlayerIfOob() {
 
@@ -572,31 +674,194 @@ camera.position.copy(playerCollider.end);
 
 			}
 
+			function moverAvionCurvo(avion, deltaTime) {
+  const data = avion.mesh.userData;
+  data.angle += data.speed * deltaTime * 4;
+  data.radius += 0.1 * deltaTime;
+
+  const x = Math.cos(data.angle) * data.radius;
+  const z = Math.sin(data.angle) * data.radius;
+  const y = data.heightBase + Math.sin(clock.elapsedTime * 0.5 + data.heightOffset) * 1.5;
+
+  avion.mesh.position.set(x, y, z);
+
+  const dx = -Math.sin(data.angle);
+  const dz = Math.cos(data.angle);
+  const lookAtPos = new THREE.Vector3(x + dx, y, z + dz);
+
+  avion.mesh.lookAt(lookAtPos);
+  avion.mesh.rotation.z = -Math.sin(data.angle * 2) * 0.3;
+}
+
+function moverAvionRecto(avion, deltaTime, index) {
+  avion.mesh.position.z += avion.speed * 100 * deltaTime;
+  avion.mesh.position.y += Math.sin(clock.elapsedTime * 0.5 + index) * 0.002;
+
+  if (avion.mesh.position.z > 100) {
+    scene.remove(avion.mesh);
+    aviones.splice(index, 1);
+    crearAvion();
+  }
+}
+
+function actualizarCaidaAvion(avion, deltaTime, index) {
+  avion.mesh.position.addScaledVector(avion.fallVelocity, deltaTime * 60);
+  avion.fallVelocity.y -= GRAVITY * deltaTime * 0.5;
+
+  // Rotación al caer
+  avion.mesh.rotation.x += deltaTime * 4;
+  avion.mesh.rotation.z += deltaTime * 2;
+
+  if (avion.mesh.position.y < 0.5) {
+    // Explosión visual
+    const flash = new THREE.PointLight(0xff5500, 10, 8);
+    flash.position.copy(avion.mesh.position);
+    scene.add(flash);
+    explosionFlashes.push({ light: flash, time: 0 });
+
+    scene.remove(avion.mesh);
+    aviones.splice(index, 1);
+  }
+}
+
 
 			function animate() {
+  const deltaTime = Math.min(0.05, clock.getDelta()) / STEPS_PER_FRAME;
 
-				const deltaTime = Math.min( 0.05, clock.getDelta() ) / STEPS_PER_FRAME;
+  for (let i = 0; i < STEPS_PER_FRAME; i++) {
+    controls(deltaTime);
+    updatePlayer(deltaTime);
+    updateSpheres(deltaTime);
+    teleportPlayerIfOob();
+  }
 
-				// we look for collisions in substeps to mitigate the risk of
-				// an object traversing another too quickly for detection.
+  renderer.render(scene, camera);
+  stats.update();
 
-				for ( let i = 0; i < STEPS_PER_FRAME; i ++ ) {
+  for (let i = aviones.length - 1; i >= 0; i--) {
+  const avion = aviones[i];
+			if (avion.isFalling) {
+			// Movimiento de caída lenta
+			avion.mesh.position.addScaledVector(avion.fallVelocity, deltaTime * 15);
+			avion.fallVelocity.y -= GRAVITY * deltaTime * 0.2;
 
-					controls( deltaTime );
+			// Rotación tipo caída descontrolada
+			avion.mesh.rotation.x = Math.min(avion.mesh.rotation.x + deltaTime * 1.0, Math.PI / 2);
+			avion.mesh.rotation.z += deltaTime * 1.5;
 
-					updatePlayer( deltaTime );
+			// 🟤 Humo en caída (añadir partículas simples)
+			if (!avion.smokeTimer) avion.smokeTimer = 0;
+			avion.smokeTimer += deltaTime;
 
-					updateSpheres( deltaTime );
+			if (avion.smokeTimer > 0.1) {
+				avion.smokeTimer = 0;
 
-					teleportPlayerIfOob();
+				const smoke = new THREE.Mesh(
+				new THREE.SphereGeometry(0.3, 6, 6),
+				new THREE.MeshBasicMaterial({ color: 0x555555, transparent: true, opacity: 0.5 })
+				);
 
-				}
+				smoke.position.copy(avion.mesh.position);
+				scene.add(smoke);
 
-				renderer.render( scene, camera );
-
-				stats.update();
-
+				// Animación de desvanecimiento
+				explosionFlashes.push({
+				light: smoke,
+				time: 0,
+				type: 'smoke'
+				});
 			}
+
+			// Detectar impacto con el suelo
+			if (avion.mesh.position.y < 0.5) {
+				// 💥 Explosión antes de desaparecer
+				const explosion = new THREE.Mesh(
+				new THREE.SphereGeometry(1, 16, 16),
+				new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 1 })
+				);
+				explosion.position.copy(avion.mesh.position);
+				scene.add(explosion);
+
+				// Luz de la explosión
+				const flash = new THREE.PointLight(0xff5500, 10, 8);
+				flash.position.copy(avion.mesh.position);
+				scene.add(flash);
+
+				// Guardar ambos para desaparecer después
+				explosionFlashes.push({ light: explosion, time: 0, type: 'explosion' });
+				explosionFlashes.push({ light: flash, time: 0, type: 'light' });
+
+				scene.remove(avion.mesh);
+				aviones.splice(i, 1);
+			}
+
+			continue;
+			}
+
+
+
+
+
+  // Si NO está cayendo, seguir comportamiento normal
+  if (avion.curvo) {
+    const data = avion.mesh.userData;
+    data.angle += data.speed * deltaTime * 4;
+    data.radius += 0.1 * deltaTime;
+
+    const x = Math.cos(data.angle) * data.radius;
+    const z = Math.sin(data.angle) * data.radius;
+    const y = data.heightBase + Math.sin(clock.elapsedTime * 0.5 + data.heightOffset) * 1.5;
+
+    avion.mesh.position.set(x, y, z);
+
+    const dx = -Math.sin(data.angle);
+    const dz = Math.cos(data.angle);
+    const lookAtPos = new THREE.Vector3(x + dx, y, z + dz);
+
+    avion.mesh.lookAt(lookAtPos);
+    avion.mesh.rotation.z = -Math.sin(data.angle * 2) * 0.3;
+
+  } else {
+    avion.mesh.position.z += avion.speed * 100 * deltaTime;
+    avion.mesh.position.y += Math.sin(clock.elapsedTime * 0.5 + i) * 0.002;
+
+    if (avion.mesh.position.z > 100) {
+      scene.remove(avion.mesh);
+      aviones.splice(i, 1);
+      crearAvion();
+    }
+  }
+}
+
+for (let i = explosionFlashes.length - 1; i >= 0; i--) {
+  const e = explosionFlashes[i];
+  e.time += deltaTime;
+
+  if (e.type === 'smoke') {
+    e.light.material.opacity -= deltaTime * 0.5;
+    e.light.scale.multiplyScalar(1 + deltaTime * 0.3);
+    if (e.light.material.opacity <= 0) {
+      scene.remove(e.light);
+      explosionFlashes.splice(i, 1);
+    }
+  } else if (e.type === 'explosion') {
+    e.light.material.opacity -= deltaTime * 2.0;
+    e.light.scale.multiplyScalar(1 + deltaTime * 5.0);
+    if (e.light.material.opacity <= 0) {
+      scene.remove(e.light);
+      explosionFlashes.splice(i, 1);
+    }
+  } else if (e.type === 'light') {
+    if (e.time > 0.4) {
+      scene.remove(e.light);
+      explosionFlashes.splice(i, 1);
+    }
+  }
+}
+
+
+}
+
 
 		</script>
 	</body>
