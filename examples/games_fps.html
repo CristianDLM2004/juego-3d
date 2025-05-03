@@ -382,6 +382,14 @@ document.addEventListener('mouseup', () => {
     sphere.explodeTime = 0;
 
 	if (avion.health <= 0) {
+
+		if (avion.curvo) {
+    avionesCurvosEliminados++;
+    document.getElementById('curvosEliminados').innerText = avionesCurvosEliminados;
+  } else {
+    avionesRectosEliminados++;
+    document.getElementById('rectosEliminados').innerText = avionesRectosEliminados;
+  }
   avion.isFalling = true;
 
   let horizontalDirection = new THREE.Vector3();
@@ -622,6 +630,10 @@ avionLoader.setDRACOLoader(dracoLoader);
 
 const aviones = [];
 
+let avionesRectosEliminados = 0;
+let avionesCurvosEliminados = 0;
+
+
 function crearAvion() {
   avionLoader.load('avion.glb', (gltf) => {
     const avion = gltf.scene.clone();
@@ -751,11 +763,19 @@ camera.position.copy(playerCollider.end);
 
 
 
-function moverAvionRecto(avion, deltaTime, index) {
+function moverAvionRecto(avion, deltaTime, i) {
   avion.mesh.position.z += avion.speed * 100 * deltaTime;
-  avion.mesh.position.y += Math.sin(clock.elapsedTime * 0.5 + index) * 0.002;
+  avion.mesh.position.y += Math.sin(clock.elapsedTime * 0.5 + i) * 0.002;
 
   if (!avion.isFalling && avion.mesh.position.z > 100) {
+	if (avion.curvo) {
+  avionesCurvosEliminados++;
+  document.getElementById('curvosEliminados').innerText = avionesCurvosEliminados;
+} else {
+  avionesRectosEliminados++;
+  document.getElementById('rectosEliminados').innerText = avionesRectosEliminados;
+}
+
   scene.remove(avion.mesh);
   aviones.splice(i, 1);
   crearAvion();
@@ -916,6 +936,7 @@ if (isMouseDown && !overheated) {
   explosionFlashes.push({ light: explosion, time: 0, type: 'explosion' });
   explosionFlashes.push({ light: flash, time: 0, type: 'light' });
 
+
   scene.remove(avion.mesh);
   aviones.splice(i, 1);
 
@@ -926,6 +947,7 @@ if (isMouseDown && !overheated) {
     crearAvion();
   }
 }
+
 
 
   continue; // Saltar a siguiente avión
@@ -1061,6 +1083,21 @@ if (overheated) {
 		<div id="heatBar" style="position: absolute; bottom: 20px; left: 20px; width: 200px; height: 10px; background: #333;">
 			<div id="heatLevel" style="height: 100%; background: red; width: 0%;"></div>
 		  </div>
+
+		  <div id="scoreBoard" style="
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  color: white;
+  font-size: 18px;
+  background: rgba(0,0,0,0.5);
+  padding: 10px;
+  border-radius: 8px;
+">
+  🛩️ Bombarderos: <span id="rectosEliminados">0</span><br>
+  🌀 Cazas: <span id="curvosEliminados">0</span>
+</div>
+
 
 		  <div id="overheatWarning" style="
 		  position: absolute;
