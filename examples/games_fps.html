@@ -1030,8 +1030,28 @@ else if (e.type === 'explosion') {
 }
 }
 
+const heatLevelDiv = document.getElementById('heatLevel')
 const heatPercent = (heatLevel / maxHeat) * 100;
-document.getElementById('heatLevel').style.width = `${heatPercent}%`;
+heatLevelDiv.style.width = `${heatPercent}%`;
+
+// Cambiar color según el porcentaje de calor
+if (heatPercent > 80) {
+  heatLevelDiv.style.background = 'red';
+} else if (heatPercent > 50) {
+  heatLevelDiv.style.background = 'orange';
+} else if (heatPercent > 20) {
+  heatLevelDiv.style.background = 'yellow';
+} else {
+  heatLevelDiv.style.background = 'limegreen';
+}
+
+// Mostrar u ocultar advertencia de sobrecalentamiento
+const warning = document.getElementById('overheatWarning');
+if (overheated) {
+  warning.style.display = 'block';
+} else {
+  warning.style.display = 'none';
+}
 
 
 }
@@ -1041,6 +1061,17 @@ document.getElementById('heatLevel').style.width = `${heatPercent}%`;
 		<div id="heatBar" style="position: absolute; bottom: 20px; left: 20px; width: 200px; height: 10px; background: #333;">
 			<div id="heatLevel" style="height: 100%; background: red; width: 0%;"></div>
 		  </div>
-		  
+
+		  <div id="overheatWarning" style="
+		  position: absolute;
+		  bottom: 40px;
+		  left: 20px;
+		  color: red;
+		  font-weight: bold;
+		  font-size: 18px;
+		  display: none;
+		  text-shadow: 1px 1px 4px black;
+		">⚠️ ¡Sobrecalentado!</div>
+		
 	</body>
 </html>
