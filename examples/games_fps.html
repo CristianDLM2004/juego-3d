@@ -136,8 +136,18 @@
 
 			let playerOnFloor = false;
 			let mouseTime = 0;
-
+			
 			const keyStates = {};
+
+			let isMouseDown = false;
+			let lastShotTime = 0;
+			let heatLevel = 0;
+			let overheated = false;
+			const fireRate = 0.2; // segundos entre disparos
+			const maxHeat = 100;
+			const heatPerShot = 2;
+			const heatCooldownRate = 50; // unidades por segundo
+
 
 			const vector1 = new THREE.Vector3();
 			const vector2 = new THREE.Vector3();
@@ -155,19 +165,15 @@
 
 			} );
 
-			container.addEventListener( 'mousedown', () => {
+			document.addEventListener('mousedown', () => {
+  isMouseDown = true;
+  document.body.requestPointerLock();
+});
 
-				document.body.requestPointerLock();
+document.addEventListener('mouseup', () => {
+  isMouseDown = false;
+});
 
-				mouseTime = performance.now();
-
-			} );
-
-			document.addEventListener( 'mouseup', () => {
-
-				if ( document.pointerLockElement !== null ) throwBall();
-
-			} );
 
 			document.body.addEventListener( 'mousemove', ( event ) => {
 
@@ -375,10 +381,42 @@
     sphere.exploding = true;
     sphere.explodeTime = 0;
 
-    if (avion.health <= 0) {
-      avion.isFalling = true;
-	  avion.fallVelocity = new THREE.Vector3(0, -0.5, 0);
-    }
+	if (avion.health <= 0) {
+  avion.isFalling = true;
+
+  let horizontalDirection = new THREE.Vector3();
+  let velocidadReal = 0;
+
+  if (avion.curvo && avion.mesh.userData.angle !== undefined) {
+    const angle = avion.mesh.userData.angle;
+
+    const tangent = new THREE.Vector3(
+      -Math.sin(angle),
+      0,
+      Math.cos(angle)
+    ).normalize();
+
+    const radius = avion.mesh.userData.radius;
+    const angularSpeed = avion.mesh.userData.speedCurvo * 4; // ✅ CORRECTO AQUÍ
+    velocidadReal = radius * angularSpeed;
+
+    horizontalDirection.copy(tangent);
+
+    avion.initialQuaternion = avion.mesh.quaternion.clone();
+  } else {
+    horizontalDirection.set(0, 0, 1);
+    velocidadReal = avion.speedRecto * 100;
+  }
+
+  avion.fallVelocity = horizontalDirection.clone().multiplyScalar(velocidadReal);
+  avion.fallVelocity.y = -1.5;
+  avion.verticalSpeed = -1.5;
+}
+
+
+
+
+
   }
 }
 
@@ -607,11 +645,12 @@ function crearAvion() {
     scene.add(avion);
 	aviones.push({
   mesh: avion,
-  speed: 0.4,
+  speedRecto: 0.7,
   curvo: false,
-  health: 8, // puntos de vida
-  isFalling: false // aún no ha sido destruido
+  health: 8,
+  isFalling: false
 });
+
   });
 }
 
@@ -629,16 +668,20 @@ function crearAvionCurvo() {
     const y = 8 + Math.random() * 5;
 
     avion.position.set(Math.cos(angle) * radius, y, Math.sin(angle) * radius);
-avion.rotation.y = Math.PI / 2; // Corrige orientación base
+ // Corrige orientación base
 
 avion.scale.set(1, 1, 1);
+const speedCurvo = 0.4 + Math.random() * 0.1;
+
 avion.userData = {
   angle,
   radius,
-  speed: 0.2 + Math.random() * 0.1,
+  speedCurvo,
   heightBase: y,
   heightOffset: Math.random() * 2
-    };
+};
+
+
 
     avion.traverse(child => {
       if (child.isMesh) {
@@ -651,11 +694,13 @@ avion.userData = {
     scene.add(avion);
 	aviones.push({
   mesh: avion,
-  speed: 0.4,
+  speedCurvo,
   curvo: true,
-  health: 8, // puntos de vida
-  isFalling: false // aún no ha sido destruido
+  health: 8,
+  isFalling: false
 });
+
+
   });
 }
 
@@ -679,6 +724,7 @@ camera.position.copy(playerCollider.end);
 
 			}
 
+
 			function moverAvionCurvo(avion, deltaTime) {
   const data = avion.mesh.userData;
   data.angle += data.speed * deltaTime * 4;
@@ -688,29 +734,37 @@ camera.position.copy(playerCollider.end);
   const z = Math.sin(data.angle) * data.radius;
   const y = data.heightBase + Math.sin(clock.elapsedTime * 0.5 + data.heightOffset) * 1.5;
 
+  // Solo mover sin tocar rotación
   avion.mesh.position.set(x, y, z);
 
-  const dx = -Math.sin(data.angle);
-  const dz = Math.cos(data.angle);
-  const lookAtPos = new THREE.Vector3(x + dx, y, z + dz);
-
-  avion.mesh.lookAt(lookAtPos);
-  avion.mesh.rotation.z = -Math.sin(data.angle * 2) * 0.3;
+  // Elimina rotación existente (para que no se herede nada)
+  avion.mesh.rotation.set(0, 0, 0);
+  avion.mesh.quaternion.identity();
 }
+
+
+
+
+
+
+
+
+
 
 function moverAvionRecto(avion, deltaTime, index) {
   avion.mesh.position.z += avion.speed * 100 * deltaTime;
   avion.mesh.position.y += Math.sin(clock.elapsedTime * 0.5 + index) * 0.002;
 
-  if (avion.mesh.position.z > 100) {
-    scene.remove(avion.mesh);
-    aviones.splice(index, 1);
-    crearAvion();
-  }
+  if (!avion.isFalling && avion.mesh.position.z > 100) {
+  scene.remove(avion.mesh);
+  aviones.splice(i, 1);
+  crearAvion();
 }
 
-function actualizarCaidaAvion(avion, deltaTime, index) {
-  avion.mesh.position.addScaledVector(avion.fallVelocity, deltaTime * 60);
+}
+
+function actualizarCaidaAvion(avion, deltaTime, i) {
+  avion.mesh.position.addScaledVector(avion.fallVelocity, deltaTime);
   avion.fallVelocity.y -= GRAVITY * deltaTime * 0.5;
 
   // Rotación al caer
@@ -725,7 +779,7 @@ function actualizarCaidaAvion(avion, deltaTime, index) {
     explosionFlashes.push({ light: flash, time: 0 });
 
     scene.remove(avion.mesh);
-    aviones.splice(index, 1);
+    aviones.splice(i, 1);
   }
 }
 
@@ -740,101 +794,145 @@ function actualizarCaidaAvion(avion, deltaTime, index) {
     teleportPlayerIfOob();
   }
 
+  // 🔥 Disparo continuo y sobrecalentamiento
+if (isMouseDown && !overheated) {
+  const now = performance.now() / 1000;
+  if (now - lastShotTime >= fireRate) {
+    throwBall();
+    lastShotTime = now;
+    heatLevel += heatPerShot;
+    if (heatLevel >= maxHeat) {
+      overheated = true;
+      heatLevel = maxHeat;
+    }
+  }
+} else {
+  // 🧊 Enfriamiento
+  heatLevel -= heatCooldownRate * deltaTime;
+  if (heatLevel <= 0) {
+    overheated = false;
+    heatLevel = 0;
+  }
+}
+
   renderer.render(scene, camera);
   stats.update();
 
   for (let i = aviones.length - 1; i >= 0; i--) {
   const avion = aviones[i];
-			if (avion.isFalling) {
-			// Movimiento de caída lenta
-			avion.mesh.position.addScaledVector(avion.fallVelocity, deltaTime * 15);
-			avion.fallVelocity.y -= GRAVITY * deltaTime * 0.2;
 
-			// Rotación tipo caída descontrolada
-			avion.mesh.rotation.x = Math.min(avion.mesh.rotation.x + deltaTime * 1.0, Math.PI / 2);
-			avion.mesh.rotation.z += deltaTime * 1.5;
 
-			// 🟤 Humo en caída (añadir partículas simples)
-			if (!avion.smokeTimer) avion.smokeTimer = 0;
-			avion.smokeTimer += deltaTime;
 
-			if (avion.smokeTimer > 0.03) {
-  avion.smokeTimer = 0;
+  if (avion.isFalling) {
+  // Inicializar velocidad vertical si no existe
+  if (avion.verticalSpeed === undefined) avion.verticalSpeed = -1.5;
 
-  const smokeGroup = new THREE.Group();
+  // Inicializar banking si no existe (esto se guarda en el momento de caer)
+  if (avion.initialQuaternion) {
+    avion.mesh.quaternion.copy(avion.initialQuaternion);
 
-  for (let j = 0; j < 5; j++) {
-    const material = new THREE.SpriteMaterial({
-      map: smokeTexture,
-      transparent: true,
-      opacity: 0.5 + Math.random() * 0.2,
-      depthWrite: false,
-      blending: THREE.NormalBlending
-    });
-
-    const sprite = new THREE.Sprite(material);
-    const scale = 1.5 + Math.random() * 1.2;
-    sprite.scale.set(scale, scale, scale);
-
-    // Posición local aleatoria
-    const offset = new THREE.Vector3(
-      (Math.random() - 0.5) * 2,
-      Math.random() * 1.5,
-      (Math.random() - 0.5) * 2
-    );
-    sprite.position.copy(offset);
-    material.rotation = Math.random() * Math.PI * 2;
-
-    smokeGroup.add(sprite);
+    // Añadir rotación tipo caída descontrolada
+    avion.mesh.rotateX(deltaTime * 2.5);
+    avion.mesh.rotateZ(deltaTime * 1.5);
+  } else {
+    // Si no tiene banking guardado, usar rotación básica
+    avion.mesh.rotation.x += deltaTime * 2.5;
+    avion.mesh.rotation.z += deltaTime * 1.5;
   }
 
-  smokeGroup.position.copy(avion.mesh.position.clone());  // Fija en espacio
-  scene.add(smokeGroup);
+  // Calcular movimiento horizontal
+  const movement = avion.fallVelocity.clone();
+  movement.y = avion.verticalSpeed; // usar componente vertical actual
 
-  explosionFlashes.push({
-    light: smokeGroup,
-    time: 0,
-    type: 'smokeGroup',
-    velocity: new THREE.Vector3(
-  (Math.random() - 0.5) * 0.05, // viento lateral
-  0.08 + Math.random() * 0.05,  // ascenso más lento
-  (Math.random() - 0.5) * 0.05  // profundidad
-)
+  // Aplicar movimiento
+  avion.mesh.position.addScaledVector(movement, deltaTime);
 
+  // Aumentar caída vertical
+  avion.verticalSpeed -= GRAVITY * deltaTime * 0.7;
+
+  // Humo en caída
+  if (!avion.smokeTimer) avion.smokeTimer = 0;
+  avion.smokeTimer += deltaTime;
+  if (avion.smokeTimer > 0.03) {
+    avion.smokeTimer = 0;
+
+    const smokeGroup = new THREE.Group();
+    for (let j = 0; j < 5; j++) {
+      const material = new THREE.SpriteMaterial({
+        map: smokeTexture,
+        transparent: true,
+        opacity: 0.5 + Math.random() * 0.2,
+        depthWrite: false,
+        blending: THREE.NormalBlending
+      });
+
+      const sprite = new THREE.Sprite(material);
+      const scale = 1.5 + Math.random() * 1.2;
+      sprite.scale.set(scale, scale, scale);
+
+      const offset = new THREE.Vector3(
+        (Math.random() - 0.5) * 2,
+        Math.random() * 1.5,
+        (Math.random() - 0.5) * 2
+      );
+      sprite.position.copy(offset);
+      material.rotation = Math.random() * Math.PI * 2;
+
+      smokeGroup.add(sprite);
+    }
+
+    smokeGroup.position.copy(avion.mesh.position.clone());
+    scene.add(smokeGroup);
+
+    explosionFlashes.push({
+      light: smokeGroup,
+      time: 0,
+      type: 'smokeGroup',
+      velocity: new THREE.Vector3(
+        (Math.random() - 0.5) * 0.05,
+        0.08 + Math.random() * 0.05,
+        (Math.random() - 0.5) * 0.05
+      )
+    });
+  }
+
+  // Detectar impacto con el suelo
+  if (avion.mesh.position.y < -7) {
+  const explosionMaterial = new THREE.SpriteMaterial({
+    map: explosionTexture,
+    transparent: true,
+    opacity: 1,
+    depthWrite: false
   });
+  const explosion = new THREE.Sprite(explosionMaterial);
+  explosion.scale.set(3, 3, 3);
+  explosion.position.copy(avion.mesh.position);
+  scene.add(explosion);
+
+  const flash = new THREE.PointLight(0xff5500, 10, 8);
+  flash.position.copy(avion.mesh.position);
+  scene.add(flash);
+
+  explosionFlashes.push({ light: explosion, time: 0, type: 'explosion' });
+  explosionFlashes.push({ light: flash, time: 0, type: 'light' });
+
+  scene.remove(avion.mesh);
+  aviones.splice(i, 1);
+
+  // 👇 AÑADIR NUEVO AVIÓN
+  if (avion.curvo) {
+    crearAvionCurvo();
+  } else {
+    crearAvion();
+  }
+}
+
+
+  continue; // Saltar a siguiente avión
 }
 
 
 
-			// Detectar impacto con el suelo
-			if (avion.mesh.position.y < -5) {
-				const explosionMaterial = new THREE.SpriteMaterial({
-  map: explosionTexture,
-  transparent: true,
-  opacity: 1,
-  depthWrite: false
-});
-const explosion = new THREE.Sprite(explosionMaterial);
-explosion.scale.set(3, 3, 3);
-explosion.position.copy(avion.mesh.position);
-scene.add(explosion);
-
-// Luz de la explosión
-const flash = new THREE.PointLight(0xff5500, 10, 8);
-flash.position.copy(avion.mesh.position);
-scene.add(flash);
-
-// Guardar ambos para desaparecer después
-explosionFlashes.push({ light: explosion, time: 0, type: 'explosion' });
-explosionFlashes.push({ light: flash, time: 0, type: 'light' });
-
-scene.remove(avion.mesh);
-aviones.splice(i, 1);
-
-			}
-
-			continue;
-			}
 
 
 
@@ -842,32 +940,45 @@ aviones.splice(i, 1);
 
   // Si NO está cayendo, seguir comportamiento normal
   if (avion.curvo) {
-    const data = avion.mesh.userData;
-    data.angle += data.speed * deltaTime * 4;
-    data.radius += 0.1 * deltaTime;
+  const data = avion.mesh.userData;
+  data.angle += avion.speedCurvo * deltaTime * 4;
+  data.radius += 0.1 * deltaTime;
 
-    const x = Math.cos(data.angle) * data.radius;
-    const z = Math.sin(data.angle) * data.radius;
-    const y = data.heightBase + Math.sin(clock.elapsedTime * 0.5 + data.heightOffset) * 1.5;
+  const x = Math.cos(data.angle) * data.radius;
+  const z = Math.sin(data.angle) * data.radius;
+  const y = data.heightBase + Math.sin(clock.elapsedTime * 0.5 + data.heightOffset) * 1.5;
 
-    avion.mesh.position.set(x, y, z);
+  const position = new THREE.Vector3(x, y, z);
+  const tangent = new THREE.Vector3(
+    -Math.sin(data.angle),
+    0,
+    Math.cos(data.angle)
+  ).normalize();
 
-    const dx = -Math.sin(data.angle);
-    const dz = Math.cos(data.angle);
-    const lookAtPos = new THREE.Vector3(x + dx, y, z + dz);
+  const up = new THREE.Vector3(0, 1, 0);
+  const side = new THREE.Vector3().crossVectors(up, tangent).normalize();
+  const correctedUp = new THREE.Vector3().crossVectors(tangent, side).normalize();
 
-    avion.mesh.lookAt(lookAtPos);
-    avion.mesh.rotation.z = -Math.sin(data.angle * 2) * 0.3;
+  const m = new THREE.Matrix4();
+  m.makeBasis(side, correctedUp, tangent); // tangent = forward
 
-  } else {
-    avion.mesh.position.z += avion.speed * 100 * deltaTime;
+  avion.mesh.position.copy(position);
+  avion.mesh.setRotationFromMatrix(m);
+
+  // ✈️ Banking realista (opcional)
+  avion.mesh.rotateZ(Math.sin(data.angle * 2) * 0.3);
+}
+
+else {
+	avion.mesh.position.z += avion.speedRecto * 100 * deltaTime;
     avion.mesh.position.y += Math.sin(clock.elapsedTime * 0.5 + i) * 0.002;
 
-    if (avion.mesh.position.z > 100) {
-      scene.remove(avion.mesh);
-      aviones.splice(i, 1);
-      crearAvion();
-    }
+	if (!avion.isFalling && avion.mesh.position.z > 100) {
+  scene.remove(avion.mesh);
+  aviones.splice(i, 1);
+  crearAvion();
+}
+
   }
 }
 
@@ -919,10 +1030,17 @@ else if (e.type === 'explosion') {
 }
 }
 
+const heatPercent = (heatLevel / maxHeat) * 100;
+document.getElementById('heatLevel').style.width = `${heatPercent}%`;
+
 
 }
 
 
 		</script>
+		<div id="heatBar" style="position: absolute; bottom: 20px; left: 20px; width: 200px; height: 10px; background: #333;">
+			<div id="heatLevel" style="height: 100%; background: red; width: 0%;"></div>
+		  </div>
+		  
 	</body>
 </html>
