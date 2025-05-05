@@ -4,7 +4,7 @@
 		<title>three.js - misc - octree collisions</title>
 		<meta charset=utf-8 />
 		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
-		<link type="text/css" rel="stylesheet" href="main.css">
+		<link type="text/css" rel="stylesheet" href="main.css">      
 	</head>
 	<body>
 		<div id="container"></div>
@@ -74,26 +74,29 @@ audioLoader.load('sounds/ambient_music.mp3', buffer => {
   backgroundMusic.play();
 });
 
-			const fillLight1 = new THREE.HemisphereLight(0xffe0b2, 0xff8a65, 1.0);
-			// luz superior e inferior cálida
-			fillLight1.position.set(2, 1, 1);
-			scene.add(fillLight1);
+// Luz ambiente suave para iluminar todo ligeramente
+const ambientLight = new THREE.AmbientLight(0xffe0cc, 0.4); // color suave, intensidad baja
+scene.add(ambientLight);
 
+// Luz hemisférica más clara (cielo arriba y suelo abajo)
+const hemisphereLight = new THREE.HemisphereLight(0xfff2e0, 0xff8a65, 1.2);
+hemisphereLight.position.set(2, 1, 1);
+scene.add(hemisphereLight);
 
-			const directionalLight = new THREE.DirectionalLight(0xffcc80, 2.0); // Luz cálida
-			directionalLight.position.set(10, 15, 5); // Posición tipo "sol bajando"
-			directionalLight.castShadow = true;
-			directionalLight.shadow.camera.near = 0.01;
-			directionalLight.shadow.camera.far = 200;
-			directionalLight.shadow.mapSize.width = 1024;
-			directionalLight.shadow.mapSize.height = 1024;
-			directionalLight.shadow.camera.top	= 30;
-			directionalLight.shadow.camera.bottom = - 30;
-			directionalLight.shadow.mapSize.width = 1024;
-			directionalLight.shadow.mapSize.height = 1024;
-			directionalLight.shadow.radius = 4;
-			directionalLight.shadow.bias = - 0.00006;
-			scene.add( directionalLight );
+// Luz direccional (simula el sol)
+const directionalLight = new THREE.DirectionalLight(0xffddaa, 2.5);
+directionalLight.position.set(10, 15, 5);
+directionalLight.castShadow = true;
+directionalLight.shadow.camera.near = 0.01;
+directionalLight.shadow.camera.far = 200;
+directionalLight.shadow.mapSize.width = 1024;
+directionalLight.shadow.mapSize.height = 1024;
+directionalLight.shadow.camera.top = 30;
+directionalLight.shadow.camera.bottom = -30;
+directionalLight.shadow.radius = 4;
+directionalLight.shadow.bias = -0.00006;
+scene.add(directionalLight);
+
 
 			const container = document.getElementById( 'container' );
 
@@ -207,8 +210,15 @@ document.addEventListener('mouseup', () => {
 
 				if ( document.pointerLockElement === document.body ) {
 
-					camera.rotation.y -= event.movementX / 500;
-					camera.rotation.x -= event.movementY / 500;
+          const euler = new THREE.Euler(0, 0, 0, 'YXZ');
+euler.setFromQuaternion(camera.quaternion);
+
+euler.y -= event.movementX / 500;
+euler.x -= event.movementY / 500;
+euler.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, euler.x)); // limitar pitch
+
+camera.quaternion.setFromEuler(euler);
+
 
 				}
 
@@ -243,11 +253,17 @@ document.addEventListener('mouseup', () => {
 			sphere.mesh.scale.set(1, 1, 1);
 			sphere.mesh.material.color.set(0xff4444);
 
-			camera.getWorldDirection(playerDirection);
-			sphere.collider.center.copy(playerCollider.end).addScaledVector(playerDirection, playerCollider.radius * 1.5);
+      const shootDirection = new THREE.Vector3();
+camera.getWorldDirection(shootDirection);
 
-			const impulse = 80 + 100 * (1 - Math.exp((mouseTime - performance.now()) * 0.001));
-			sphere.velocity.copy(playerDirection).multiplyScalar(impulse);
+const origin = new THREE.Vector3();
+camera.getWorldPosition(origin);
+sphere.collider.center.copy(origin).addScaledVector(shootDirection, 1.0);
+
+
+const impulse = 80 + 100 * (1 - Math.exp((mouseTime - performance.now()) * 0.001));
+sphere.velocity.copy(shootDirection).multiplyScalar(impulse);  // ✅ usar shootDirection
+
 			sphere.velocity.addScaledVector(playerVelocity, 2);
 
 			sphereIdx = (sphereIdx + 1) % spheres.length;
@@ -1296,6 +1312,8 @@ if (startTime !== null) {
   z-index: 1000;
 ">
   ⏱️ Tiempo: <span id="timeElapsed">0.00</span> s
+ 
+
 </div>		
 	</body>
 </html>
