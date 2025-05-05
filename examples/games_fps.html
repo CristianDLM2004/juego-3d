@@ -59,6 +59,61 @@
 
 			const camera = new THREE.PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 0.1, 1000 );
 			camera.rotation.order = 'YXZ';
+      scene.add(camera);
+
+
+
+let cannon = null;
+
+const gunLoader = new GLTFLoader().setPath('./models/gltf/');
+let arma = null; // referencia global
+
+gunLoader.load('cannon.glb', function (gltf) {
+  arma = gltf.scene;
+
+  // ✅ Aplica los valores finales que ajustaste
+  arma.position.set(0.35, -0.42, -0.33);
+  arma.rotation.set(
+    THREE.MathUtils.degToRad(31.32),
+    THREE.MathUtils.degToRad(-74.88),
+    THREE.MathUtils.degToRad(-17.28)
+  );
+  arma.scale.set(0.33561, 0.33561, 0.33561);
+
+  camera.add(arma);
+  arma.userData.originalPosition = arma.position.clone();
+
+
+  const gunLight = new THREE.PointLight(0xffffff, 0.8);
+  gunLight.position.set(0.1, 0, 0.2);
+  arma.add(gunLight);
+
+  console.log('✅ Arma colocada con valores finales');
+});
+
+function animarRetroceso() {
+  if (!arma) return;
+
+  // Evita múltiples retrocesos simultáneos
+  if (arma.userData.retrocediendo) return;
+
+  arma.userData.retrocediendo = true;
+
+  // Retrocede ligeramente en el eje Z
+  const retroceso = new THREE.Vector3(0, 0, 0.05);
+  arma.position.add(retroceso);
+
+  setTimeout(() => {
+    // Vuelve a la posición original
+    arma.position.copy(arma.userData.originalPosition);
+    arma.userData.retrocediendo = false;
+  }, 80); // duración del retroceso
+}
+
+
+
+
+
 
       // ✅ Listener y AudioLoader deben ir aquí
 const listener = new THREE.AudioListener();
@@ -273,6 +328,8 @@ sphere.velocity.copy(shootDirection).multiplyScalar(impulse);  // ✅ usar shoot
   shot.setVolume(0.35); // volumen reducido
   shot.setPlaybackRate(0.9 + Math.random() * 0.2); // variación entre 0.9 y 1.1
   shot.play();
+  animarRetroceso();
+
 }
 
 

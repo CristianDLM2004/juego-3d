@@ -8,7 +8,7 @@
       margin: 0;
       padding: 0;
       font-family: 'Segoe UI', sans-serif;
-      background-image: url('images/fondo.jpg');
+      background-image: url('images/fondo.png');
       background-size: cover;
       background-repeat: no-repeat;
       background-position: center;
@@ -81,7 +81,7 @@
 </head>
 <body>
   <div class="container">
-    <h1>Juego 3D de Aviones</h1>
+    <h1>Juego 3D-Artillería Antiaérea</h1>
     <a href="examples/games_fps.html">Iniciar Juego</a>
 
     <button class="toggle-button" onclick="toggleTutorial()">📘 Mostrar Instrucciones</button>
@@ -97,12 +97,29 @@
     </div>
   </div>
 
+  <audio id="menuMusic" loop>
+    <source src="./examples/sounds/menumusic.mp3" type="audio/mp3">
+    <audio id="menuMusic" loop volume="1.0">
+
+    Tu navegador no soporta audio HTML5.
+  </audio>
+  
   <script>
     function toggleTutorial() {
       const tutorial = document.getElementById('tutorial');
-      const isVisible = tutorial.style.display === 'block';
-      tutorial.style.display = isVisible ? 'none' : 'block';
+      tutorial.style.display = (tutorial.style.display === 'block') ? 'none' : 'block';
     }
+  
+    // Reproducir música al primer clic en cualquier parte del documento
+    window.addEventListener('click', () => {
+      const music = document.getElementById('menuMusic');
+      if (music.paused) {
+        music.play().catch(err => console.warn('🎵 Autoplay bloqueado:', err));
+      }
+    }, { once: true }); // Solo ejecuta una vez
   </script>
+  
+  
+  
 </body>
 </html>
