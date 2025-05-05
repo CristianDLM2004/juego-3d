@@ -1,42 +1,108 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Three.js Projects Index</title>
-    <style>
-        body {
-            background-color: #f0f0f0;
-            font-family: Arial, sans-serif;
-            text-align: center;
-            padding-top: 50px;
-        }
-        h1 {
-            color: #333;
-        }
-        ul {
-            list-style: none;
-            padding: 0;
-        }
-        li {
-            margin: 20px 0;
-        }   
-        a {
-            text-decoration: none;
-            color: #0077cc;
-            font-size: 20px;
-        }
-        a:hover {
-            text-decoration: underline;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <title>Menú del Juego 3D</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background-image: url('images/fondo.jpg');
+      background-size: cover;
+      background-repeat: no-repeat;
+      background-position: center;
+      color: white;
+      text-align: center;
+    }
+
+    .container {
+      background: rgba(0, 0, 0, 0.65);
+      padding: 40px;
+      max-width: 600px;
+      margin: 100px auto;
+      border-radius: 20px;
+      box-shadow: 0 0 20px #000;
+    }
+
+    h1 {
+      font-size: 36px;
+      margin-bottom: 30px;
+    }
+
+    a {
+      display: block;
+      margin: 15px 0;
+      padding: 10px 20px;
+      font-size: 20px;
+      color: white;
+      text-decoration: none;
+      background: #ff7f50;
+      border-radius: 8px;
+      transition: background 0.3s;
+    }
+
+    a:hover {
+      background: #e65c34;
+    }
+
+    .toggle-button {
+      background: #ffd166;
+      color: #000;
+      padding: 10px 20px;
+      font-size: 16px;
+      margin-top: 25px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    .toggle-button:hover {
+      background: #ffb100;
+    }
+
+    .tutorial {
+      display: none;
+      text-align: left;
+      margin-top: 20px;
+      background: rgba(255, 255, 255, 0.1);
+      padding: 20px;
+      border-radius: 10px;
+      font-size: 16px;
+      line-height: 1.5;
+    }
+
+    .tutorial h2 {
+      text-align: center;
+      color: #ffe0b3;
+    }
+  </style>
 </head>
 <body>
+  <div class="container">
+    <h1>Juego 3D de Aviones</h1>
+    <a href="examples/games_fps.html">Iniciar Juego</a>
 
-    <h1>Three.js Demos</h1>
+    <button class="toggle-button" onclick="toggleTutorial()">📘 Mostrar Instrucciones</button>
 
-    <ul>
-        <li><a href="examples/games_fps.html">Game FPS</a></li>
-    </ul>
+    <div class="tutorial" id="tutorial">
+      <h2>Instrucciones del Juego</h2>
+      <p><strong>🎯 Objetivo:</strong> Destruye todos los aviones enemigos antes de que escapen.</p>
+      <p><strong>🕹️ Movimiento:</strong> Usa <kbd>W</kbd>, <kbd>A</kbd>, <kbd>S</kbd>, <kbd>D</kbd> y el mouse para mirar.</p>
+      <p><strong>🔥 Disparo:</strong> Mantén presionado el <kbd>clic izquierdo</kbd> para disparar.</p>
+      <p><strong>⚠️ Sobrecalentamiento:</strong> Si disparas sin parar, el arma se sobrecalienta y necesitas esperar.</p>
+      <p><strong>💥 Explosiones:</strong> Los aviones explotan si reciben suficiente daño y caen al suelo.</p>
+      <p><strong>🏆 Victoria:</strong> Ganas al destruir 20 aviones enemigos.</p>
+    </div>
+  </div>
 
+  <script>
+    function toggleTutorial() {
+      const tutorial = document.getElementById('tutorial');
+      const isVisible = tutorial.style.display === 'block';
+      tutorial.style.display = isVisible ? 'none' : 'block';
+    }
+  </script>
 </body>
 </html>
