@@ -7,11 +7,6 @@
 		<link type="text/css" rel="stylesheet" href="main.css">
 	</head>
 	<body>
-		<div id="info">
-			<br />
-			Da click en la pantalla para mover la cámara y poder disparar<br/>
-			WASD para moverte y Espacio para saltar
-		</div>
 		<div id="container"></div>
 
 		<script type="importmap">
@@ -32,6 +27,15 @@
 			const smokeTexture = textureLoader.load('./textures/smoke.png');
 			const explosionTexture = textureLoader.load('./textures/explosion.png');
 
+      const TOTAL_OBJETIVO = 1; // Por ejemplo
+      let startTime = null;
+      let gameWon = false;
+
+      let victoryTimeout = null;
+      const RECORD_KEY = 'recordTiempoAviones';
+
+
+
 			import Stats from 'three/addons/libs/stats.module.js';
 
 			import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -43,6 +47,8 @@
 
 			import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 
+
+
 			const clock = new THREE.Clock();
 
 			const scene = new THREE.Scene();
@@ -53,6 +59,20 @@
 
 			const camera = new THREE.PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 0.1, 1000 );
 			camera.rotation.order = 'YXZ';
+
+      // ✅ Listener y AudioLoader deben ir aquí
+const listener = new THREE.AudioListener();
+camera.add(listener);
+
+const audioLoader = new THREE.AudioLoader();
+
+const backgroundMusic = new THREE.Audio(listener);
+audioLoader.load('sounds/ambient_music.mp3', buffer => {
+  backgroundMusic.setBuffer(buffer);
+  backgroundMusic.setLoop(true);
+  backgroundMusic.setVolume(0.1);
+  backgroundMusic.play();
+});
 
 			const fillLight1 = new THREE.HemisphereLight(0xffe0b2, 0xff8a65, 1.0);
 			// luz superior e inferior cálida
@@ -148,6 +168,14 @@
 			const heatPerShot = 2;
 			const heatCooldownRate = 50; // unidades por segundo
 
+      let shootSound;
+      let shootBuffer = null;
+audioLoader.load('sounds/shoot.mp3', buffer => {
+  shootBuffer = buffer;
+});
+
+
+
 
 			const vector1 = new THREE.Vector3();
 			const vector2 = new THREE.Vector3();
@@ -198,6 +226,13 @@ document.addEventListener('mouseup', () => {
 			}
 
 			function throwBall() {
+        if (gameWon) return;
+
+
+        if (startTime === null) {
+  startTime = performance.now();
+}
+
 	let attempts = 0;
 	while (attempts < spheres.length) {
 		const sphere = spheres[sphereIdx];
@@ -216,6 +251,16 @@ document.addEventListener('mouseup', () => {
 			sphere.velocity.addScaledVector(playerVelocity, 2);
 
 			sphereIdx = (sphereIdx + 1) % spheres.length;
+      if (shootBuffer && !overheated) {
+  const shot = new THREE.Audio(listener);
+  shot.setBuffer(shootBuffer);
+  shot.setVolume(0.35); // volumen reducido
+  shot.setPlaybackRate(0.9 + Math.random() * 0.2); // variación entre 0.9 y 1.1
+  shot.play();
+}
+
+
+
 			return;
 		}
 
@@ -390,6 +435,76 @@ document.addEventListener('mouseup', () => {
     avionesRectosEliminados++;
     document.getElementById('rectosEliminados').innerText = avionesRectosEliminados;
   }
+
+
+  const totalDestruidos = avionesRectosEliminados + avionesCurvosEliminados;
+  if (totalDestruidos >= TOTAL_OBJETIVO && !gameWon) {
+  gameWon = true;
+  const endTime = performance.now();
+  const timeTaken = ((endTime - startTime) / 1000).toFixed(2);
+
+  // 🟡 Mostrar mensaje inmediato para que el jugador vea que ganó
+  const aviso = document.createElement('div');
+  aviso.innerText = '✅ Objetivo cumplido';
+  aviso.style.position = 'absolute';
+  aviso.style.top = '50%';
+  aviso.style.left = '50%';
+  aviso.style.transform = 'translate(-50%, -50%)';
+  aviso.style.color = 'white';
+  aviso.style.fontSize = '22px';
+  aviso.style.background = 'rgba(0, 0, 0, 0.7)';
+  aviso.style.padding = '10px 20px';
+  aviso.style.borderRadius = '10px';
+  aviso.style.zIndex = '9999';
+  document.body.appendChild(aviso);
+
+  setTimeout(() => {
+    document.body.removeChild(aviso);
+    document.exitPointerLock();
+
+    document.getElementById('heatBar').style.display = 'none';
+document.getElementById('scoreBoard').style.display = 'none';
+document.getElementById('timeDisplay').style.display = 'none';
+document.getElementById('overheatWarning').style.display = 'none';
+
+
+    const recordAnterior = localStorage.getItem(RECORD_KEY);
+    const nuevoRecord = !recordAnterior || timeTaken < recordAnterior;
+
+    if (nuevoRecord) {
+      localStorage.setItem(RECORD_KEY, timeTaken);
+    }
+
+    const victoryDiv = document.createElement('div');
+    victoryDiv.innerHTML = `
+      🎉 ¡Ganaste!<br>
+      Tiempo: <strong>${timeTaken}</strong> segundos<br>
+      ${nuevoRecord ? '🏆 ¡Nuevo récord!' : `⏱️ Récord anterior: ${recordAnterior}s`}
+      <br><br>
+      <button id="reiniciarBtn">Reiniciar</button>
+    `;
+    victoryDiv.style.position = 'absolute';
+    victoryDiv.style.top = '50%';
+    victoryDiv.style.left = '50%';
+    victoryDiv.style.transform = 'translate(-50%, -50%)';
+    victoryDiv.style.color = 'white';
+    victoryDiv.style.fontSize = '22px';
+    victoryDiv.style.background = 'rgba(0, 0, 0, 0.85)';
+    victoryDiv.style.padding = '20px';
+    victoryDiv.style.borderRadius = '12px';
+    victoryDiv.style.textAlign = 'center';
+    victoryDiv.style.zIndex = '9999';
+    document.body.appendChild(victoryDiv);
+
+
+
+    document.getElementById('reiniciarBtn').onclick = () => {
+      location.reload();
+    };
+  }, 2000);
+}
+
+
   avion.isFalling = true;
 
   let horizontalDirection = new THREE.Vector3();
@@ -501,6 +616,9 @@ for (let i = explosionFlashes.length - 1; i >= 0; i--) {
 
 			function controls( deltaTime ) {
 
+        if (gameWon) return;
+
+
 				// gives a bit of air control
 				const speedDelta = deltaTime * ( playerOnFloor ? 25 : 8 );
 
@@ -563,6 +681,7 @@ for (let i = explosionFlashes.length - 1; i >= 0; i--) {
 
 
 			loader.load('battlefield.glb',(gltf) => {
+
     scene.add(gltf.scene);
     worldOctree.fromGraphNode(gltf.scene);
 
@@ -655,6 +774,26 @@ function crearAvion() {
     });
 
     scene.add(avion);
+    const engineSound = new THREE.PositionalAudio(listener);
+    audioLoader.load('sounds/plane_engine.mp3', buffer => {
+  engineSound.setBuffer(buffer);
+  engineSound.setLoop(true);
+  engineSound.setVolume(4);
+  engineSound.setRefDistance(8);
+  engineSound.setRolloffFactor(2);
+  engineSound.setDistanceModel('exponential');
+
+  // 🎚️ Pitch aleatorio entre 0.95 y 1.05
+  engineSound.setPlaybackRate(0.95 + Math.random() * 0.1);
+
+  // ⏱️ Retardo aleatorio hasta 2 segundos
+  setTimeout(() => {
+    engineSound.play();
+  }, Math.random() * 2000);
+});
+
+avion.add(engineSound);
+
 	aviones.push({
   mesh: avion,
   speedRecto: 0.7,
@@ -704,6 +843,27 @@ avion.userData = {
     });
 
     scene.add(avion);
+    const engineSound = new THREE.PositionalAudio(listener);
+    audioLoader.load('sounds/plane_engine.mp3', buffer => {
+  engineSound.setBuffer(buffer);
+  engineSound.setLoop(true);
+  engineSound.setVolume(6);
+  engineSound.setRefDistance(8);
+  engineSound.setRolloffFactor(2);
+  engineSound.setDistanceModel('exponential');
+
+  // 🎚️ Pitch aleatorio entre 0.95 y 1.05
+  engineSound.setPlaybackRate(0.95 + Math.random() * 0.1);
+
+  // ⏱️ Retardo aleatorio hasta 2 segundos
+  setTimeout(() => {
+    engineSound.play();
+  }, Math.random() * 2000);
+});
+
+avion.add(engineSound);
+
+
 	aviones.push({
   mesh: avion,
   speedCurvo,
@@ -815,7 +975,7 @@ function actualizarCaidaAvion(avion, deltaTime, i) {
   }
 
   // 🔥 Disparo continuo y sobrecalentamiento
-if (isMouseDown && !overheated) {
+  if (!gameWon && isMouseDown && !overheated) {
   const now = performance.now() / 1000;
   if (now - lastShotTime >= fireRate) {
     throwBall();
@@ -834,6 +994,7 @@ if (isMouseDown && !overheated) {
     heatLevel = 0;
   }
 }
+ 
 
   renderer.render(scene, camera);
   stats.update();
@@ -1075,40 +1236,66 @@ if (overheated) {
   warning.style.display = 'none';
 }
 
+if (startTime !== null) {
+  const now = performance.now();
+  const elapsedSeconds = ((now - startTime) / 1000).toFixed(2);
+  document.getElementById('timeElapsed').innerText = elapsedSeconds;
+}
+
+
 
 }
 
 
 		</script>
-		<div id="heatBar" style="position: absolute; bottom: 20px; left: 20px; width: 200px; height: 10px; background: #333;">
-			<div id="heatLevel" style="height: 100%; background: red; width: 0%;"></div>
-		  </div>
+<!-- Medidor de calor -->
+<div id="heatBar" style="position: absolute; bottom: 20px; left: 20px; width: 220px; height: 12px; background: #222; border-radius: 6px; overflow: hidden;">
+  <div id="heatLevel" style="height: 100%; background: limegreen; width: 0%; transition: width 0.1s;"></div>
+</div>
 
-		  <div id="scoreBoard" style="
+<!-- Advertencia de sobrecalentamiento -->
+<div id="overheatWarning" style="
   position: absolute;
-  top: 20px;
+  bottom: 40px;
+  left: 20px;
+  color: red;
+  font-weight: bold;
+  font-size: 18px;
+  display: none;
+  text-shadow: 1px 1px 4px black;
+">⚠️ ¡Sobrecalentado!</div>
+
+
+<!-- Puntaje -->
+<div id="scoreBoard" style="
+  position: absolute;
+  bottom: 80px;
   left: 20px;
   color: white;
-  font-size: 18px;
+  font-size: 16px;
   background: rgba(0,0,0,0.5);
-  padding: 10px;
-  border-radius: 8px;
-">
+  padding: 8px 12px;
+  border-radius: 6px;
+  line-height: 1.4;">
   🛩️ Bombarderos: <span id="rectosEliminados">0</span><br>
   🌀 Cazas: <span id="curvosEliminados">0</span>
 </div>
 
 
-		  <div id="overheatWarning" style="
-		  position: absolute;
-		  bottom: 40px;
-		  left: 20px;
-		  color: red;
-		  font-weight: bold;
-		  font-size: 18px;
-		  display: none;
-		  text-shadow: 1px 1px 4px black;
-		">⚠️ ¡Sobrecalentado!</div>
-		
+<div id="timeDisplay" style="
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  color: white;
+  font-size: 17px;
+  background: rgba(0,0,0,0.6);
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-weight: 500;
+  text-shadow: 1px 1px 2px black;
+  z-index: 1000;
+">
+  ⏱️ Tiempo: <span id="timeElapsed">0.00</span> s
+</div>		
 	</body>
 </html>
